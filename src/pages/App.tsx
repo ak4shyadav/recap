@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { generateRecap, RecapOutput } from '../lib/ai';
 import { supabase } from '../lib/supabase';
 
+const DAILY_LIMIT = 3;
+
 export function App() {
   const [inputText, setInputText] = useState('');
   const [output, setOutput] = useState<RecapOutput | null>(null);
@@ -28,29 +30,43 @@ export function App() {
 
     const today = new Date().toISOString().split('T')[0];
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('usage')
       .select('*')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (!data) {
-      await supabase.from('usage').insert([{ user_id: user.id }]);
-      setRemaining(3);
+    if (error) {
+      console.error('Usage fetch error:', error);
       return;
     }
 
+    // First time user
+    if (!data) {
+      const { error: insertError } = await supabase
+        .from('usage')
+        .insert([{ user_id: user.id, daily_count: 0, last_reset: today }]);
+
+      if (!insertError) {
+        setRemaining(DAILY_LIMIT);
+      }
+      return;
+    }
+
+    // Reset if new day
     if (data.last_reset !== today) {
-      await supabase
+      const { error: resetError } = await supabase
         .from('usage')
         .update({ daily_count: 0, last_reset: today })
         .eq('user_id', user.id);
 
-      setRemaining(3);
+      if (!resetError) {
+        setRemaining(DAILY_LIMIT);
+      }
       return;
     }
 
-    setRemaining(3 - data.daily_count);
+    setRemaining(Math.max(0, DAILY_LIMIT - data.daily_count));
   };
 
   const handleGenerate = async (e: FormEvent) => {
@@ -103,23 +119,17 @@ export function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
             <FileText className="w-8 h-8 text-slate-700" />
             <h1 className="text-2xl font-bold text-slate-900">Recap</h1>
           </div>
           <div className="flex items-center gap-4">
-            <Link
-              to="/history"
-              className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:text-slate-900 font-medium transition"
-            >
+            <Link to="/history" className="flex items-center gap-2">
               <Clock className="w-5 h-5" />
               History
             </Link>
-            <button
-              onClick={() => signOut()}
-              className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:text-slate-900 font-medium transition"
-            >
+            <button onClick={() => signOut()} className="flex items-center gap-2">
               <LogOut className="w-5 h-5" />
               Sign Out
             </button>
@@ -127,7 +137,7 @@ export function App() {
         </div>
       </nav>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <main className="max-w-5xl mx-auto px-4 py-12">
         <form onSubmit={handleGenerate} className="mb-8">
           <div className="bg-white rounded-xl shadow-sm p-6">
             {remaining !== null && (
@@ -136,15 +146,14 @@ export function App() {
               </p>
             )}
 
-            <label className="block text-lg font-semibold text-slate-900 mb-3">
-              Enter your notes or meeting transcript
+            <label className="block text-lg font-semibold mb-3">
+              Enter your notes
             </label>
 
             <textarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="Paste your meeting notes, project updates, or brain dump here..."
-              className="w-full h-64 px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none resize-none transition"
+              className="w-full h-64 px-4 py-3 border rounded-lg resize-none"
               disabled={loading}
             />
 
@@ -157,7 +166,7 @@ export function App() {
             <button
               type="submit"
               disabled={loading || !inputText.trim()}
-              className="mt-4 w-full flex items-center justify-center gap-2 bg-slate-900 text-white py-3 rounded-lg hover:bg-slate-800 font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-4 w-full flex items-center justify-center gap-2 bg-slate-900 text-white py-3 rounded-lg"
             >
               <Sparkles className="w-5 h-5" />
               {loading ? 'Generating...' : 'Generate Recap'}
@@ -190,23 +199,15 @@ export function App() {
           <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-xl">
             <h2 className="text-xl font-bold mb-2">Free limit reached</h2>
             <p className="text-slate-600 mb-4">
-              You’ve used all 3 free recaps for today. Upgrade to Pro for unlimited access.
+              You’ve used all {DAILY_LIMIT} free recaps for today.
             </p>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowPaywall(false)}
-                className="flex-1 px-4 py-2 rounded-lg border"
-              >
-                Close
-              </button>
-
-              <button
-                className="flex-1 px-4 py-2 rounded-lg bg-slate-900 text-white"
-              >
-                Upgrade
-              </button>
-            </div>
+            <button
+              onClick={() => setShowPaywall(false)}
+              className="w-full px-4 py-2 rounded-lg border"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
@@ -217,8 +218,8 @@ export function App() {
 function Section({ title, children }: any) {
   return (
     <div className="bg-white rounded-xl shadow-sm p-6">
-      <h2 className="text-xl font-bold text-slate-900 mb-3">{title}</h2>
-      <div className="text-slate-700">{children}</div>
+      <h2 className="text-xl font-bold mb-3">{title}</h2>
+      <div>{children}</div>
     </div>
   );
 }
@@ -228,11 +229,11 @@ function ListSection({ title, items }: any) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-6">
-      <h2 className="text-xl font-bold text-slate-900 mb-3">{title}</h2>
+      <h2 className="text-xl font-bold mb-3">{title}</h2>
       <ul className="space-y-2">
         {items.map((item: string, idx: number) => (
-          <li key={idx} className="flex gap-3 text-slate-700">
-            <span className="text-slate-400 font-medium">•</span>
+          <li key={idx} className="flex gap-3">
+            <span>•</span>
             <span>{item}</span>
           </li>
         ))}
