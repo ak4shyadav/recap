@@ -16,20 +16,32 @@ export function History() {
   }, []);
 
   const loadRecaps = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('recaps')
-        .select('*')
-        .order('created_at', { ascending: false });
+  try {
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
 
-      if (error) throw error;
-      setRecaps(data || []);
-    } catch (err) {
-      console.error('Error loading recaps:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('recaps')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+  console.error("SUPABASE ERROR:", error);
+  throw error;
+}
+
+    setRecaps(data || []);
+  } catch (err) {
+    console.error('Error loading recaps:', err);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const deleteRecap = async (id: string) => {
     if (!confirm('Are you sure you want to delete this recap?')) return;
@@ -146,13 +158,16 @@ export function History() {
                   <div className="bg-white rounded-xl shadow-sm p-6">
                     <h3 className="text-lg font-semibold text-slate-900 mb-3">Key Highlights</h3>
                     <ul className="space-y-2">
-                      {selectedRecap.key_highlights.map((item, idx) => (
-                        <li key={idx} className="flex gap-3 text-slate-700">
-                          <span className="text-slate-400">•</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
+  {selectedRecap.action_items.map((item, idx) => (
+    <li key={idx} className="flex gap-3 text-slate-700">
+      <span className="text-slate-400">•</span>
+      <span>
+        {item.task} — {item.owner} ({item.priority})
+      </span>
+    </li>
+  ))}
+</ul>
+
                   </div>
 
                   <div className="bg-white rounded-xl shadow-sm p-6">
@@ -185,7 +200,9 @@ export function History() {
                       {selectedRecap.action_items.map((item, idx) => (
                         <li key={idx} className="flex gap-3 text-slate-700">
                           <span className="text-slate-400">•</span>
-                          <span>{item}</span>
+                          <span>
+                            {item.task} — {item.owner} ({item.priority})
+                          </span>
                         </li>
                       ))}
                     </ul>

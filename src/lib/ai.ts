@@ -1,44 +1,31 @@
+export interface ActionItem {
+  task: string;
+  owner: string;
+  priority: string;
+}
+
 export interface RecapOutput {
-  executive_summary: string;
-  key_highlights: string[];
-  decisions_taken: string[];
-  risks_blockers: string[];
-  action_items: string[];
-  next_steps: string[];
+  executiveSummary: string;
+  keyHighlights: string[];
+  decisionsTaken: string[];
+  risksAndBlockers: string[];
+  actionItems: ActionItem[];
+  nextSteps: string[];
 }
 
 export async function generateRecap(inputText: string): Promise<RecapOutput> {
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  const response = await fetch("http://localhost:4000/api/generate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ text: inputText })
+  });
 
-  return {
-    executive_summary: `This is a mock executive summary generated from your input: "${inputText.slice(0, 50)}${inputText.length > 50 ? '...' : ''}". The AI analysis has processed the key themes and generated insights.`,
-    key_highlights: [
-      'Primary objective identified and documented',
-      'Stakeholder alignment achieved',
-      'Resource requirements clarified',
-      'Timeline expectations established'
-    ],
-    decisions_taken: [
-      'Approved technical approach for implementation',
-      'Assigned team leads for each workstream',
-      'Established weekly checkpoint meetings'
-    ],
-    risks_blockers: [
-      'Potential resource constraints in Q2',
-      'Dependency on external API stability',
-      'Technical debt in legacy systems'
-    ],
-    action_items: [
-      'Schedule kickoff meeting by end of week',
-      'Document technical specifications',
-      'Set up monitoring and alerting',
-      'Create rollback procedures'
-    ],
-    next_steps: [
-      'Review and finalize project plan',
-      'Begin Phase 1 implementation',
-      'Conduct weekly progress reviews',
-      'Prepare status report for leadership'
-    ]
-  };
+  if (!response.ok) {
+    throw new Error("Failed to generate recap");
+  }
+
+  const data = await response.json();
+  return data;
 }
